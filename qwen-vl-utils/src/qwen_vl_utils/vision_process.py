@@ -15,10 +15,12 @@ from typing import Optional
 import requests
 import torch
 import torchvision
+import torchaudio
 from packaging import version
 from PIL import Image
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
+import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,9 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
     image = image.resize((resized_width, resized_height))
 
     return image
+
+
+
 
 
 def smart_nframes(
@@ -459,6 +464,7 @@ def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[di
                         "image" in ele
                         or "image_url" in ele
                         or "video" in ele
+                        or "audio" in ele
                         or ele.get("type","") in ("image", "image_url", "video")
                     ):
                         vision_infos.append(ele)
@@ -491,3 +497,66 @@ def process_vision_info(
     if return_video_kwargs:
         return image_inputs, video_inputs, {'fps': video_sample_fps_list}
     return image_inputs, video_inputs
+
+
+
+
+def fetch_audio(ele: dict[str, str | bytes]) -> tuple[np.ndarray, int]:
+    if "audio" in ele:
+        audio = ele["audio"]
+    else:
+        audio = ele["audio_url"]
+    audio_obj = None
+    if isinstance(audio, bytes):
+        audio_obj = audio
+    elif audio.startswith("http://") or audio.startswith("https://"):
+        # fix memory leak issue while using BytesIO
+        with requests.get(audio, stream=True) as response:
+            response.raise_for_status()
+            with BytesIO(response.content) as bio:
+                audio_obj = bio
+    elif audio.startswith("file://"):
+        audio_obj = audio[7:] # this is a file path
+
+    if audio_obj is None:
+        raise ValueError(f"Unrecognized audio input, support local path, http url, got {audio}")
+    
+    sample_array, sampling_rate = torchaudio.load(audio_obj)
+
+    return np.array(sample_array).squeeze(), sampling_rate
+
+
+
+def extract_audio_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
+    audio_infos = []
+    if isinstance(conversations[0], dict):
+        conversations = [conversations]
+    for conversation in conversations:
+        for message in conversation:
+            if isinstance(message["content"], list):
+                for ele in message["content"]:
+                    if (
+                        "audio" in ele
+                        or "audio_url" in ele
+                        or ele.get("type","") in ("audio", "audio_url")
+                    ):
+                        audio_infos.append(ele)
+    return audio_infos
+
+
+def process_audio_info(
+    conversations: list[dict] | list[list[dict]],
+) -> tuple[np.ndarray, int]:
+
+    audio_infos = extract_audio_info(conversations)
+    ## Read audios
+    audio_inputs = []
+    for audio_info in audio_infos:
+        if "audio" in audio_info or "audio_url" in audio_info:
+            audio_inputs.append(fetch_audio(audio_info))
+        else:
+            raise ValueError("audio or audio_url should in content.")
+    if len(audio_inputs) == 0:
+        audio_inputs = None
+
+    return audio_inputs
