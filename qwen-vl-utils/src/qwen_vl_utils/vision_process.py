@@ -501,31 +501,39 @@ def process_vision_info(
 
 
 
-def fetch_audio(ele: dict[str, str | bytes]) -> tuple[np.ndarray, int]:
+# def fetch_audio(ele: dict[str, str | bytes]) -> tuple[np.ndarray, int]:
+#     if "audio" in ele:
+#         audio = ele["audio"]
+#     else:
+#         audio = ele["audio_url"]
+#     audio_obj = None
+#     if isinstance(audio, bytes):
+#         audio_obj = audio
+#     elif audio.startswith("http://") or audio.startswith("https://"):
+#         # fix memory leak issue while using BytesIO
+#         with requests.get(audio, stream=True) as response:
+#             response.raise_for_status()
+#             with BytesIO(response.content) as bio:
+#                 audio_obj = bio
+#     elif audio.startswith("file://"):
+#         audio_obj = audio[7:] # this is a file path
+
+#     if audio_obj is None:
+#         raise ValueError(f"Unrecognized audio input, support local path, http url, got {audio}")
+    
+#     sample_array, sampling_rate = torchaudio.load(audio_obj)
+
+#     return np.array(sample_array).squeeze(), sampling_rate
+
+
+def fetch_audio(ele: dict) -> torch.Tensor:
     if "audio" in ele:
         audio = ele["audio"]
     else:
         audio = ele["audio_url"]
-    audio_obj = None
-    if isinstance(audio, bytes):
-        audio_obj = audio
-    elif audio.startswith("http://") or audio.startswith("https://"):
-        # fix memory leak issue while using BytesIO
-        with requests.get(audio, stream=True) as response:
-            response.raise_for_status()
-            with BytesIO(response.content) as bio:
-                audio_obj = bio
-    elif audio.startswith("file://"):
-        audio_obj = audio[7:] # this is a file path
-
-    if audio_obj is None:
-        raise ValueError(f"Unrecognized audio input, support local path, http url, got {audio}")
-    
-    sample_array, sampling_rate = torchaudio.load(audio_obj)
-
-    return np.array(sample_array).squeeze(), sampling_rate
-
-
+    # TODO: support http url
+    wav_tensor, sampleing_rate = torchaudio.load(BytesIO(audio))
+    return wav_tensor.numpy(), sampleing_rate
 
 def extract_audio_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
     audio_infos = []
