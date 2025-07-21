@@ -533,7 +533,7 @@ def fetch_audio(ele: dict) -> torch.Tensor:
         audio = ele["audio_url"]
     # TODO: support http url
     wav_tensor, sampleing_rate = torchaudio.load(BytesIO(audio))
-    return wav_tensor.numpy(), sampleing_rate
+    return wav_tensor.numpy()#, sampleing_rate
 
 def extract_audio_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
     audio_infos = []
